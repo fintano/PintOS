@@ -1,0 +1,165 @@
+정현이와 성철이의 신송판 ^_^
+
+--- 11.06 ---
+
+우리가 짠 busy waiting에 문제가있는것같아서
+이거 mutexlock으로 다 바꿨는데
+kernel PANIC 뜬다.
+
+아직 다시 수정안한상태 ( thread.c/ thread.h/ syscall.c/ process.c)
+
+multi-recurse 라는거 3번째 child만 exit(3)이 안뜬다고했는데
+그앞에 printf넣으면 또 뜬다.
+printf 넣어야만 되는경우가 지금까지 계속 있어온만큼 이것좀해결하고싶은데..
+
+
+
+--- 11.05 ---
+
+read-normal
+read-bad-ptr
+read-boundary
+write-boundary
+
+이것들 왜안되는지 모르겠다
+
+아니 분명 각각으로 실행시키면 잘되는데
+
+make check만 실행하면 뻑나네 
+
+239byte가 떠야하는데 계속 8byte만 읽어들어와져 
+write-boundary도 그래 8byte만 읽혀져
+
+그래서 내가 생각하기엔 이 뭐같은 상황이 synch를 안해서그런가싶기도한데
+좀 짜증나네 끙..
+
+이 외에도 filesize seek에 있는 return 0으로되어있던거 제대로 해주니까 몇개 더 되서 12개만 fail인상태
+
+일단 넘어가고 synch좀 해볼께
+
+synch 완료
+
+현재 원인파악안되는 것. 
+
+- 저 위에있는 read/write
+
+- multi-recurse 라는 child여러개만들어서 돌리는게 있는데 
+
+  15개 child를 돌리는데 하필 3번째 child만 exit(3)이 안뜸.
+
+  debugging 해봐야할듯
+
+- rox series -> 아직 해보지도않음.
+
+
+--- 11.05 12:17 ---
+현재 fail 뜨는 테스트 목록
+create-null  //해결 12:48
+close-twice  //해결 13:00
+read-normal
+read-bad-ptr
+read-boundary
+write-boundary
+
+
+
+
+
+--- 11.05 01:37 ---
+
+정현이 신송 확인
+
+
+--- 11.05 01:17 ---
+오늘은 좀 많음
+일단 우리가 전역으로 선언한 gFd랑,
+그거에 쓰이는 fd_list가 필요가 없어졌음.
+구조체는 남겨두긴 했는데 지워두 될 듯.
+그리고 쓰레드에 들어갈 fdSet 에 파일포인터를 추가했어.
+이에 따라 thread_init에 초기화 해줬고
+오픈도 수정함. 이전에 짜논거는 malloc을 안해놔서 작동을 안했던것임.
+그외에 seek, tell, size, close 는 fd에 따라 리스트 탐색해서
+찾도록 구현했음.
+
+앞으로 할 거는 open null, close twice 같은 예외 처리하고
+synchronization, deny write 하면 될 것 같다
+그럼 수고
+
+
+
+
+--- 11.04  14:41 ---
+
+#이정현 신송확인 
+
+--- 11.03  23:30 ---
+메이크 체크 돌려봤는데
+open-normal
+open-boundary
+open-null
+open-twic 
+fail 뜸.
+오픈 업데이트랑 쓰레드 부분에서 fd 값에 gFd.fd_cnt+2를 넣었던데
+보니까 위에서 fd_cnt를 이미 1개 증가시켰으므로 +1만 해주면
+될 것같아서 수정함. 그리고 open의 리턴값이 없어서
+fd에 값 할당 해주고 리턴 시켰는데도 fail 뜸 ㅠㅠ
+
+
+-------------
+
+thread에 가져다 넣었고.
+전역변수도 다 했는데 
+즉, open 함수 완료
+
+체크 안해봄 >ㅅ<
+
+아 근데 .. 아직도 헷갈리는게 
+구조체로 작업할때 보통 -> 이거 쓰잖아 
+근데 상황이 안되면 . 쓸수도 있는거아닌가?
+왜 우리가 보는 전문가들 코드는 . 이거 하나도 없고 다 -> 이거일까?
+여기서는 malloc도 못써서 그냥 . 으로함 
+
+--- 11.03 ---
+정리한 것
+1. 전역변수로 fd_list 만듦
+
+struct file_dstor{
+ int fd_count;
+ struct list list_fd;
+}
+
+struct fd_elem{ 
+  list_elem elem;
+  int fd;
+  struct file* fp;
+}
+
+struct fdSet_elem{
+ list_elem elem;
+ int fd;
+}
+
+thread{
+
+ struct list list_fdSet;
+
+}
+
+이후에 syscall은 파일 포인터 가져다 쓰기만 하면 됨.
+
+synchronization
+write랑 read에 걸어준다.
+busy-waiting으로 구현해보고
+나중에 lock이나 semaphore로 구현
+
+deny-write
+process_exec 할 때
+fdSet에 있는 fd들 다 돌면서
+deny write 걸어준다.
+
+process_exit 할 때
+fdSet에 있는 fd들 다 돌면서
+allow_write 걸어준다.
+
+끝
+--- **** ---
